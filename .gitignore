@@ -1,0 +1,25 @@
+# ===== Model weights & checkpoints =====
+models/**/checkpoint-*/
+models/**/*.pt
+models/**/*.pth
+models/**/*.bin
+models/**/*.safetensors
+
+# ===== Datasets =====
+data/
+Kaggle Dataset/
+FakeNewsNet/
+
+# ===== HuggingFace caches =====
+.cache/
+**/*.arrow
+
+# ===== Misc =====
+__pycache__/
+.DS_Store
+wandb/
+runs/
+logs/
+
+
+
