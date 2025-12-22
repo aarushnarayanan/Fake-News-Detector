@@ -200,8 +200,7 @@ def main():
     model = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR).to(device)
     model.eval()
 
-    temperature = 1.0
-    #temperature = load_temperature(MODEL_DIR)
+    temperature = load_temperature(MODEL_DIR)
     print(f"Loaded model: {MODEL_DIR}")
     print(f"Loaded temperature: {temperature}\n")
 
