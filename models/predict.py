@@ -184,8 +184,8 @@ def predict_text(
     top_probs = [p for _, p in top_pairs]
     avg_top3 = float(np.mean(top_probs[:3])) if len(top_probs) >= 3 else (float(np.mean(top_probs)) if top_probs else 0.0)
 
-    final_p = max(overall_p, avg_top3)
-    label = "FAKE" if final_p >= 0.60 else "REAL"
+    final_p = max(overall_p, 0.6 * avg_top3)
+    label = "FAKE" if final_p >= 0.65 else "REAL"
     return overall_p, final_p, top_pairs, highlighted, label
 
 
