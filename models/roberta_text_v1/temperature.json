@@ -1,0 +1,6 @@
+{
+  "temperature": 10.0,
+  "calibration_dataset": "LIAR/valid.tsv",
+  "max_len": 256,
+  "note": "Temperature scaling for RoBERTa logits. Apply logits/T before softmax."
+}

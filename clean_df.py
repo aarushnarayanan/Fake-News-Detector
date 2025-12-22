@@ -9,7 +9,7 @@ liar_test = pd.read_csv('LIAR/test.tsv', sep='\t', header=None) #liar test has 1
 liar_train = pd.read_csv('LIAR/train.tsv', sep='\t', header=None) #liar train has 10240 samples --=> 80.05% of total data
 liar_valid = pd.read_csv('LIAR/valid.tsv', sep='\t', header=None) #liar valid has 1284 samples --> 10.038% of total data
 
-#FAKENewsNet datasets used for social context
+#Currently all unused in model --> potentially to be added as additional feature later for social contet
 gossipcop_fake = pd.read_csv('FAKENewsNet/gossipcop_fake.csv') #gossipcop_fake has 5323 samples --> 22.94% of total data
 gossipcop_real = pd.read_csv('FAKENewsNet/gossipcop_real.csv') #gossipcop_real has 16817 samples --> 72.49% of total data
 politifact_fake = pd.read_csv('FAKENewsNet/politifact_fake.csv') #politifact_fake has 432 samples --> 1.86% of total data
