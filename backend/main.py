@@ -59,7 +59,7 @@ def startup_event():
 # --- Pydantic Models ---
 
 class AnalyzeRequest(BaseModel):
-    text: str = Field(..., max_length=10000, title="Input text or URL")
+    text: str = Field(..., max_length=3000, title="Input text or URL")
 
 class EvidenceItem(BaseModel):
     text: str
@@ -107,7 +107,10 @@ def analyze_text(request: Request, payload: AnalyzeRequest, db: Session = Depend
     
     clean_text = sanitize_input(payload.text)
     if not clean_text:
-        raise HTTPException(status_code=400, detail="Input text is empty")
+        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+    
+    if len(clean_text) > 3000:
+        raise HTTPException(status_code=400, detail="Text is too long (limit: 3000 characters).")
 
     # Run Prediction
     try:

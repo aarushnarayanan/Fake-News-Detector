@@ -55,20 +55,21 @@ const HomePage = () => {
                 <textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}
+                    maxLength={3000}
                     placeholder="Paste article text here..."
                     className="w-full h-64 bg-slate-950/50 border border-slate-700 rounded-lg p-4 text-slate-100 placeholder:text-slate-600 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none transition-all"
                 />
 
                 <div className="mt-6 flex items-center justify-between">
-                    <p className="text-slate-500 text-sm">
-                        {text.length} characters
+                    <p className={`text-sm ${text.length >= 3000 ? 'text-red-400 font-bold' : 'text-slate-500'}`}>
+                        {text.length} / 3000 characters
                     </p>
                     <button
                         onClick={handleAnalyze}
-                        disabled={loading || !text.trim()}
+                        disabled={loading || !text.trim() || text.length > 3000}
                         className={`
                             px-8 py-3 rounded-lg font-semibold flex items-center gap-2 transition-all
-                            ${loading || !text.trim()
+                            ${loading || !text.trim() || text.length > 3000
                                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                                 : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/40'}
                         `}
