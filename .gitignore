@@ -20,6 +20,8 @@ __pycache__/
 wandb/
 runs/
 logs/
-
-
-
+# ===== Secrets & Environment =====
+.env
+keys.env
+*.env
+keys.env
