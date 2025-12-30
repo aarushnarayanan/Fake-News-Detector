@@ -25,6 +25,8 @@ const ResultsPage = () => {
 
     // Function to parse highlighted text
     const renderHighlightedText = (text) => {
+        if (!text) return <span className="text-slate-400 italic">Analysis details not available for this legacy entry.</span>;
+
         // Replace [[...]] with wrapped spans
         const parts = text.split(/\[\[(.*?)\]\]/g);
 

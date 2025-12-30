@@ -11,6 +11,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
+from newspaper import Article
 
 # Add project root to path to import models
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -57,6 +58,13 @@ def startup_event():
         pass
 
 # --- Pydantic Models ---
+
+class ScrapeRequest(BaseModel):
+    url: str = Field(..., title="Article URL")
+
+class ScrapeResponse(BaseModel):
+    title: str
+    text: str
 
 class AnalyzeRequest(BaseModel):
     title: Optional[str] = Field(None, max_length=500, title="News Title")
@@ -172,6 +180,25 @@ def get_history(limit: int = 10, db: Session = Depends(get_db)):
             created_at=p.created_at.strftime("%Y-%m-%d %H:%M")
         ) for p in predictions
     ]
+
+@app.post("/scrape", response_model=ScrapeResponse)
+@limiter.limit("5/minute")
+def scrape_article(request: Request, payload: ScrapeRequest):
+    try:
+        article = Article(payload.url)
+        article.download()
+        article.parse()
+        
+        # Basic cleanup
+        title = article.title
+        text = article.text
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Could not extract text from this URL. Try pasting the body manually.")
+            
+        return ScrapeResponse(title=title, text=text)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to scrape URL: {str(e)}")
 
 @app.get("/")
 def health_check():

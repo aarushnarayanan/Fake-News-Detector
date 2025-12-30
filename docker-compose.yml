@@ -12,17 +12,23 @@ services:
     depends_on:
       - db
     volumes:
-       # Mount models for dev iteration, also avoids huge build context copy if we use .dockerignore
+      - ./backend:/app/backend
       - ./models:/app/models
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      target: build
     ports:
-      - "5173:80"
+      - "5173:5173"
     depends_on:
       - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Guard node_modules from being overwritten by the host
+    command: npm run dev -- --host
 
   db:
     image: postgres:15-alpine
