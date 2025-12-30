@@ -59,7 +59,8 @@ def startup_event():
 # --- Pydantic Models ---
 
 class AnalyzeRequest(BaseModel):
-    text: str = Field(..., max_length=3000, title="Input text or URL")
+    title: Optional[str] = Field(None, max_length=500, title="News Title")
+    text: str = Field(..., max_length=3000, title="News Body")
 
 class EvidenceItem(BaseModel):
     text: str
@@ -80,6 +81,7 @@ class FeedbackRequest(BaseModel):
 
 class HistoryItem(BaseModel):
     id: int
+    title: Optional[str] = None
     text_preview: str
     label: str
     probability: float
@@ -105,24 +107,31 @@ def analyze_text(request: Request, payload: AnalyzeRequest, db: Session = Depend
     if not predictor:
         raise HTTPException(status_code=503, detail="Model not initialized")
     
-    clean_text = sanitize_input(payload.text)
-    if not clean_text:
+    clean_title = sanitize_input(payload.title) if payload.title else ""
+    clean_body = sanitize_input(payload.text)
+    
+    if not clean_body:
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
     
-    if len(clean_text) > 3000:
+    if len(clean_body) > 3000:
         raise HTTPException(status_code=400, detail="Text is too long (limit: 3000 characters).")
 
     # Run Prediction
     try:
-        result = predictor.predict(clean_text)
+        # Pass both title and body to the model
+        result = predictor.predict(body=clean_body, title=clean_title)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
     
     # Save to DB
-    input_hash = hashlib.sha1(clean_text.encode("utf-8")).hexdigest()
+    # Combine title and body for hash to ensure uniqueness
+    combined_text = f"{clean_title}\n{clean_body}"
+    input_hash = hashlib.sha1(combined_text.encode("utf-8")).hexdigest()
+    
     db_prediction = Prediction(
         input_text_hash=input_hash,
-        input_text_preview=clean_text[:100],
+        title=clean_title if clean_title else None,
+        input_text_preview=clean_body[:100],
         label=result['label'],
         probability=result['probability']
     )
@@ -156,12 +165,12 @@ def get_history(limit: int = 10, db: Session = Depends(get_db)):
     return [
         HistoryItem(
             id=p.id,
+            title=p.title,
             text_preview=p.input_text_preview,
             label=p.label,
             probability=p.probability,
-            created_at=p.created_at.isoformat()
-        )
-        for p in predictions
+            created_at=p.created_at.strftime("%Y-%m-%d %H:%M")
+        ) for p in predictions
     ]
 
 @app.get("/")

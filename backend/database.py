@@ -18,6 +18,7 @@ class Prediction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     input_text_hash = Column(String, index=True)  # Sha1 of input text
+    title = Column(String, nullable=True) # Optional news title
     input_text_preview = Column(String)  # First 100 chars
     label = Column(String)
     probability = Column(Float)

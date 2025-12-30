@@ -12,12 +12,21 @@ const HistoryPage = () => {
         fetchHistory();
     }, []);
 
-    const fetchHistory = async () => {
+    const fetchHistory = () => {
         try {
-            const res = await axios.get(`${API_BASE_URL}/history`);
-            setHistory(res.data);
+            // --- STEP 2: READ FROM LOCAL STORAGE ---
+            // Instead of call the API, we grab the data from the browser's memory
+            const localData = localStorage.getItem('veriscope_history');
+
+            if (localData) {
+                setHistory(JSON.parse(localData));
+            } else {
+                setHistory([]);
+            }
+            // ----------------------------------------
         } catch (err) {
-            console.error(err);
+            console.error("Failed to load local history:", err);
+            setHistory([]);
         } finally {
             setLoading(false);
         }
@@ -43,7 +52,7 @@ const HistoryPage = () => {
                             className="glass-card p-4 flex items-center justify-between hover:bg-slate-900/80 transition-colors"
                         >
                             <div>
-                                <div className="flex items-center gap-3 mb-1">
+                                <div className="flex items-center gap-3 mb-2">
                                     <span className={`
                                         text-xs font-bold px-2 py-0.5 rounded uppercase
                                         ${item.label === 'FAKE' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}
@@ -54,10 +63,15 @@ const HistoryPage = () => {
                                         {(item.probability * 100).toFixed(1)}% Confidence
                                     </span>
                                     <span className="text-xs text-slate-600">
-                                        {new Date(item.created_at).toLocaleDateString()}
+                                        {item.created_at}
                                     </span>
                                 </div>
-                                <p className="text-slate-300 text-sm line-clamp-1 max-w-xl">
+                                {item.title && (
+                                    <h3 className="text-slate-100 font-semibold text-sm mb-1 line-clamp-1">
+                                        {item.title}
+                                    </h3>
+                                )}
+                                <p className="text-slate-400 text-xs line-clamp-1 max-w-xl italic">
                                     {item.text_preview}...
                                 </p>
                             </div>

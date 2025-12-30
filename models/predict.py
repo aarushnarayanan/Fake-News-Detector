@@ -1,7 +1,5 @@
-from cProfile import label
 import os
 import json
-from pydoc import text
 import re
 import argparse
 from typing import List, Tuple, Dict, Any
@@ -123,53 +121,29 @@ class FakeNewsPredictor:
                     highlighted = highlighted[:start] + "[[" + highlighted[start:end] + "]]" + highlighted[end:]
         return highlighted
 
-    def predict(self, text: str, top_k: int = DEFAULT_TOP_K) -> Dict[str, Any]:
+    def predict(self, body: str, title: str = "", top_k: int = DEFAULT_TOP_K) -> Dict[str, Any]:
         """
         Refactored main prediction logic returning a dictionary.
         """
-        text = re.sub(r"\s+", " ", text).strip()
-        if not text:
+        body = re.sub(r"\s+", " ", body).strip()
+        if not body:
             raise ValueError("Empty input text.")
-
-        # Overall score (single pass on full text)
-        # Note: In original code, it calls batch_predict_probs which calls tokenizer which adds special tokens.
-        # The input text to batch_predict_probs in original code was just the raw text (cleaned).
-        # Wait, original code in split_sentences added "TITLE: BODY:". 
-        # But for OVERALL score, the original code did:
-        # overall_p = float(batch_predict_probs(..., [text], ...)[0])
-        # And `text` there was just `user_text` (cleaned). 
-        # It did NOT add "TITLE: BODY:" for the overall score call?
-        # Checking lines 42-47 of original:
-        # split_into_sentences ADDS "TITLE: BODY:".
-        # predict_text lines 137-142: cleans text, then calls batch_predict_probs([text]). 
-        # So overall score DOES NOT have "TITLE: BODY:" prepended?
-        # That seems inconsistent if the training data had it.
-        # Let's check `clean_df.py`:
-        # df["input_text"] = "TITLE: " + df["title"] + " BODY: " + df["text"]
         
-        # So the model was trained with "TITLE: ... BODY: ...".
-        # If the original `predict.py` wasn't adding it for the overall score, that might be a bug in the old script 
-        # or `text` input was expected to include it?
-        # The original `predict.py` line 47: `text = "TITLE:  BODY: " + text` is inside `split_into_sentences`.
-        # But `predict_text` calls `batch_predict_probs` on the raw `text` first (line 142).
-        
-        # I will FIX this by ensuring "TITLE: BODY: " is prepended if not present, to match training.
-        # But to be safe and avoid breaking changes if `text` already has it, I'll simple prepend it for now
-        # OR assume the user input is just the body. 
-        # I'll stick to what seemed to be the intent: PREPEND it for consistency.
-        
-        input_text_formatted = f"TITLE:  BODY: {text}"
+        # If no title is provided, use empty string.
+        # Format according to model's expected input: "TITLE: {title} BODY: {body}"
+        title = re.sub(r"\s+", " ", title).strip() if title else ""
+        input_text_formatted = f"TITLE: {title} BODY: {body}"
         
         overall_p = float(self._batch_predict_probs([input_text_formatted])[0])
         
         # Evidence: sentence/chunk scoring
-        # split_into_sentences adds the prefix internally in the original code. 
-        # My refactored _split_into_sentences also adds it.
-        snippets = self._split_into_sentences(text)
+        snippets = self._split_into_sentences(body)
         snippets = [s for s in snippets if len(s.split()) >= 5]
         
         # Calculate snippet probs - Prefix for the model but keep original for highlighting
-        snippets_prefixed = [f"TITLE:  BODY: {s}" for s in snippets]
+        # For snippets, we don't necessarily have a "title" per sentence, 
+        # but the model expects the prefix. We'll use the provided title for all snippets.
+        snippets_prefixed = [f"TITLE: {title} BODY: {s}" for s in snippets]
         snippet_probs = self._batch_predict_probs(snippets_prefixed)
         
         pairs = list(zip(snippets, snippet_probs.tolist()))
@@ -179,7 +153,7 @@ class FakeNewsPredictor:
         top_pairs = [(s, p) for (s, p) in top_pairs if len(s.split()) >= 5]
         top_snips = [s for (s, _) in top_pairs]
         
-        highlighted = self._highlight_text_snippets(text, top_snips)
+        highlighted = self._highlight_text_snippets(body, top_snips)
         
         top_probs = [p for _, p in top_pairs]
         avg_top3 = float(np.mean(top_probs[:3])) if len(top_probs) >= 3 else (float(np.mean(top_probs)) if top_probs else 0.0)
