@@ -24,7 +24,12 @@ FAKE_THRESHOLD = 0.5  # aggressive mode
 class FakeNewsPredictor:
     """
     Encapsulates the model, tokenizer, and prediction logic.
+    Uses a Singleton-style class-level cache for model weights and tokenizer.
     """
+    _tokenizer = None
+    _model = None
+    _temperature = None
+
     def __init__(self, model_dir: str = MODEL_DIR, device: str = None):
         self.model_dir = model_dir
         if device:
@@ -32,12 +37,19 @@ class FakeNewsPredictor:
         else:
             self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         
-        print(f"Loading model from {self.model_dir} to {self.device}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_dir)
-        self.model = AutoModelForSequenceClassification.from_pretrained(self.model_dir).to(self.device)
-        self.model.eval()
-        self.temperature = self._load_temperature()
-        print(f"Model loaded. Temperature: {self.temperature}")
+        if FakeNewsPredictor._model is None:
+            print(f"Loading shared model from {self.model_dir} to {self.device}...")
+            FakeNewsPredictor._tokenizer = AutoTokenizer.from_pretrained(self.model_dir)
+            FakeNewsPredictor._model = AutoModelForSequenceClassification.from_pretrained(self.model_dir).to(self.device)
+            FakeNewsPredictor._model.eval()
+            FakeNewsPredictor._temperature = self._load_temperature()
+            print(f"Model loaded and cached. Temperature: {FakeNewsPredictor._temperature}")
+        else:
+            print("Using cached model weights.")
+        
+        self.tokenizer = FakeNewsPredictor._tokenizer
+        self.model = FakeNewsPredictor._model
+        self.temperature = FakeNewsPredictor._temperature
 
     def _load_temperature(self) -> float:
         temp_path = os.path.join(self.model_dir, "temperature.json")
@@ -159,7 +171,7 @@ class FakeNewsPredictor:
         avg_top3 = float(np.mean(top_probs[:3])) if len(top_probs) >= 3 else (float(np.mean(top_probs)) if top_probs else 0.0)
         
         final_p = max(overall_p, 0.6 * avg_top3)
-        label = "FAKE" if final_p >= 0.65 else "REAL" # Threshold from original code line 188
+        label = "FAKE" if final_p >= 0.60 else "REAL" 
         
         return {
             "label": label,

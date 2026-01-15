@@ -2,7 +2,11 @@ import sys
 import os
 import re
 import hashlib
+import json
+import datetime
+import requests
 from typing import List, Optional
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +15,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
-from newspaper import Article
+import trafilatura
 
 # Add project root to path to import models
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,9 +23,25 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.predict import FakeNewsPredictor
 from backend.database import get_db, init_db, Prediction, Feedback
 
+# Simple in-memory cache for scraping results
+# Format: {url: {"data": ScrapeResponse, "timestamp": datetime.datetime}}
+SCRAPE_CACHE = {}
+CACHE_TTL_SECONDS = 300  # 5 minutes
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- STARTUP ---
+    print("Application starting: Initializing shared resources...")
+    init_db()
+    # Initialize the predictor once here
+    app.state.predictor = FakeNewsPredictor()
+    yield
+    # --- SHUTDOWN ---
+    print("Application shutting down...")
+
 # Initialize Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="Fake News Detector API")
+app = FastAPI(title="Fake News Detector API", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -40,22 +60,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global model instance
-predictor = None
-
-@app.on_event("startup")
-def startup_event():
-    global predictor
-    # Initialize DB
-    init_db()
-    # Load Model
-    # Assumes models directory is accessible from root
-    try:
-        predictor = FakeNewsPredictor()
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        # In production, we might want to crash if model fails, but for dev we continue
-        pass
 
 # --- Pydantic Models ---
 
@@ -112,6 +116,7 @@ def sanitize_input(text: str) -> str:
 @app.post("/analyze", response_model=AnalyzeResponse)
 @limiter.limit("5/minute") # Rate limit: 5 requests per minute per IP
 def analyze_text(request: Request, payload: AnalyzeRequest, db: Session = Depends(get_db)):
+    predictor = request.app.state.predictor
     if not predictor:
         raise HTTPException(status_code=503, detail="Model not initialized")
     
@@ -184,22 +189,55 @@ def get_history(limit: int = 10, db: Session = Depends(get_db)):
 @app.post("/scrape", response_model=ScrapeResponse)
 @limiter.limit("5/minute")
 def scrape_article(request: Request, payload: ScrapeRequest):
+    url = payload.url.strip()
+    
+    # Check Cache first
+    now = datetime.datetime.now()
+    if url in SCRAPE_CACHE:
+        cache_entry = SCRAPE_CACHE[url]
+        if (now - cache_entry["timestamp"]).total_seconds() < CACHE_TTL_SECONDS:
+            print(f"Returning cached results for: {url}")
+            return cache_entry["data"]
+
     try:
-        article = Article(payload.url)
-        article.download()
-        article.parse()
+        # User-Agent to impersonate a real browser (Chrome on Mac)
+        browser_user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         
-        # Basic cleanup
-        title = article.title
-        text = article.text
+        # Use requests directly for better control over headers/timeouts
+        response = requests.get(url, headers={"User-Agent": browser_user_agent}, timeout=10)
         
-        if not text:
-            raise HTTPException(status_code=400, detail="Could not extract text from this URL. Try pasting the body manually.")
+        if not response.ok:
+            raise HTTPException(status_code=400, detail=f"Failed to reach the URL (Status: {response.status_code}). The site might be blocking the request.")
+        
+        downloaded = response.text
+        
+        # Extract content using trafilatura with metadata
+        result = trafilatura.extract(downloaded, include_comments=False, include_tables=False, output_format='json')
+        
+        if not result:
+            raise HTTPException(status_code=400, detail="The page loaded, but no article content could be found.")
             
-        return ScrapeResponse(title=title, text=text)
+        data = json.loads(result)
+        title = data.get('title', 'Unknown Title')
+        text = data.get('text', '')
+
+        if not text:
+            raise HTTPException(status_code=400, detail="Could not extract text from the article body.")
+            
+        response_data = ScrapeResponse(title=title, text=text)
+        
+        # Update Cache
+        SCRAPE_CACHE[url] = {
+            "data": response_data,
+            "timestamp": now
+        }
+        
+        return response_data
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to scrape URL: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail=f"Scraping error: {str(e)}")
 
 @app.get("/")
-def health_check():
-    return {"status": "ok", "model_loaded": predictor is not None}
+def health_check(request: Request):
+    return {"status": "ok", "model_loaded": getattr(request.app.state, 'predictor', None) is not None}

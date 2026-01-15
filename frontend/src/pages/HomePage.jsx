@@ -32,20 +32,24 @@ const HomePage = () => {
     };
 
     const executeAnalysis = async (finalTitle, finalText) => {
-        if (!finalText.trim()) return;
+        // Defensive check for input
+        const safeText = String(finalText || "").trim();
+        const safeTitle = String(finalTitle || "").trim().substring(0, 500);
+
+        if (!safeText) return;
 
         setLoading(true);
         setError(null);
         try {
             const response = await axios.post(`${API_BASE_URL}/analyze`, {
-                title: finalTitle?.trim() || null,
-                text: finalText.trim()
+                title: safeTitle || null,
+                text: safeText.substring(0, 3000) // Client-side cap for safety
             });
 
             const newHistoryItem = {
                 ...response.data,
-                title: finalTitle?.trim() || null,
-                text_preview: finalText.trim().substring(0, 100),
+                title: safeTitle || null,
+                text_preview: safeText.substring(0, 100),
                 created_at: new Date().toISOString()
             };
 
@@ -55,8 +59,10 @@ const HomePage = () => {
 
             navigate('/results', { state: { data: response.data } });
         } catch (err) {
-            console.error(err);
-            setError(err.response?.data?.detail || "Failed to analyze text. Ensure backend is running.");
+            console.error("Analysis Error:", err);
+            const detail = err.response?.data?.detail;
+            // Defensive: Detail might be an object/list from FastAPI
+            setError(typeof detail === 'object' ? JSON.stringify(detail) : (detail || "Failed to analyze text. Ensure backend is running."));
         } finally {
             setLoading(false);
         }
@@ -231,7 +237,9 @@ const HomePage = () => {
                 {error && (
                     <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3 text-red-400">
                         <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                        <p>{error}</p>
+                        <p className="text-sm break-words whitespace-pre-wrap">
+                            {typeof error === 'string' ? error : JSON.stringify(error)}
+                        </p>
                     </div>
                 )}
             </motion.div>
